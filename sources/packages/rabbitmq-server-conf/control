@@ -4,7 +4,7 @@ NAME="rabbitmq-server-conf"
 VERSION=0.4
 RELEASE=0
 DESCRIPTION=""
-REQUIRES="canohome canotools supervisord-conf rabbitmq-server"
+REQUIRES="canohome canolibs supervisord-conf rabbitmq-server"
 
 NO_ARCH=true
 NO_DIST=true
@@ -21,53 +21,124 @@ function post_install(){
 	launch_cmd 1 service rabbitmq-server start
 
 	echo -n "Safe wait ..."
-
-	STATE=1
+	
+	STATE=0
 	TRY=0
-	while [ $STATE -ne 0 ]; do
+	while [ $STATE -eq 0 ]; do
 	    if [ $TRY -eq 30 ]; then
 	        break
 	    fi
 	    sleep 1
-	    launch_cmd 0 "rabbitmqadmin -H 127.0.0.1 list nodes" &> /dev/null
-	    STATE=$?
+	    STATE=`launch_cmd 0 service rabbitmq-server status | grep RUNNING | wc -l`
 	    TRY=$((TRY + 1))
 	    echo -n "."
 	done
 	echo
-	check_code $STATE "Failed to join API ..."
+	
+	if [ $STATE -eq 0 ]
+	then
+		check_code 1 "Failed to test rabbit service ..."
+	fi
 	sleep 1
 
-	CODE=0
-	echo " + Declare Admin user ..."
-	$PREFIX/bin/rabbitmqadmin -H 127.0.0.1 declare user name=admin password=admin tags=administrator
-	RCODE=$?
-	if [ $RCODE -ne 0 ]; then CODE=$RCODE; fi
+	ADMIN_EXISTS=`launch_cmd 0 rabbitmqctl list_users | grep "^admin" | wc -l`
 
-	echo " + Declare vhost ..."
-	$PREFIX/bin/rabbitmqadmin -H 127.0.0.1 declare vhost name=canopsis
-	RCODE=$?
-	if [ $RCODE -ne 0 ]; then CODE=$RCODE; fi
+	if [ $ADMIN_EXISTS -ne 1 ]
+	then
+		if [ "x$RABBITMQ_ADMIN_PASSWD" == "x" ]
+		then
+			while true
+			do
+				safe_prompt "RabbitMQ password for admin: " adminpass
+				safe_prompt "Confirm password: " confirm
 
-	echo " + Declare permissions for guest user ..."
-	$PREFIX/bin/rabbitmqadmin -H 127.0.0.1 -V canopsis declare permission vhost=canopsis user=guest configure=".*" write=".*" read=".*"
-	RCODE=$?
-	if [ $RCODE -ne 0 ]; then CODE=$RCODE; fi
+				if [ "$adminpass" == "$confirm" ]
+				then
+					break
+				else
+					echo "Passwords doesn't match"
+				fi
+			done
+		else
+			adminpass=$RABBITMQ_ADMIN_PASSWD
+		fi
 
-	#echo " + Remove old queues ..."
-	#$PREFIX/bin/rabbitmqadmin -H 127.0.0.1 --vhost=canopsis --username=guest --password=guest delete queue name="amqp2engines" &> /dev/null
-	#$PREFIX/bin/rabbitmqadmin -H 127.0.0.1 --vhost=canopsis --username=guest --password=guest delete queue name="amqp2engines_alerts" &> /dev/null
+		echo " + Declare Admin user ..."
+		launch_cmd 1 $PREFIX/bin/rabbitmqctl add_user admin $adminpass
+		launch_cmd 1 $PREFIX/bin/rabbitmqctl set_user_tags admin administrator
+	fi
+
+	VHOST_EXISTS=`launch_cmd 0 rabbitmqctl list_vhosts | grep canopsis | wc -l`
+
+	# Is this a first install or an update
+	if [ $VHOST_EXISTS -ne 1 ]
+	then
+		echo " + Declare vhost ..."
+		launch_cmd 1 $PREFIX/bin/rabbitmqctl add_vhost canopsis
+		
+		echo " + Declare permissions for Admin user ..."
+		launch_cmd 1 $PREFIX/bin/rabbitmqctl set_permissions -p canopsis admin "\".*\"" "\".*\"" "\".*\""
+	fi
+
+	COMMONUSER_EXISTS=`launch_cmd 0 rabbitmqctl list_users | grep "\[canopsis\]" | wc -l`
+
+	if [ $COMMONUSER_EXISTS -ne 1 ]
+	then
+		if [ "x$RABBITMQ_USER" == "x" ]
+		then
+			while true
+			do
+				safe_prompt "RabbitMQ common user: " cpsuser "show"
+
+				user_exists=`launch_cmd 0 rabbitmqctl list_users | grep "^$cpsuser" | wc -l`
+
+				if [ $user_exists -ne 1 ]
+				then
+					break
+				fi
+			done
+		else
+			cpsuser=$RABBITMQ_USER
+		fi
+
+		if [ "x$RABBITMQ_USER_PASSWD" == "x" ]
+		then
+			while true
+			do
+				safe_prompt "RabbitMQ password for $cpsuser: " cpspass
+				safe_prompt "Confirm password: " confirm
+
+				if [ "$cpspass" == "$confirm" ]
+				then
+					break
+				else
+					echo "Passwords doesn't match"
+				fi
+			done
+		else
+			cpspass=$RABBITMQ_USER_PASSWD
+		fi
+		
+		echo " + Declare $cpsuser user ..."
+		launch_cmd 1 $PREFIX/bin/rabbitmqctl add_user $cpsuser $cpspass
+		launch_cmd 1 $PREFIX/bin/rabbitmqctl set_user_tags $cpsuser canopsis
+
+		echo " + Declare permissions for $cpsuser user ..."
+		launch_cmd 1 $PREFIX/bin/rabbitmqctl set_permissions -p canopsis $cpsuser "\".*\"" "\".*\"" "\".*\""
+
+		echo " + Update $PREFIX/etc/amqp.conf ..."
+		launch_cmd 1 $PREFIX/bin/initool set $PREFIX/etc/amqp.conf master userid $cpsuser
+		launch_cmd 1 $PREFIX/bin/initool set $PREFIX/etc/amqp.conf master password $cpspass
+	fi
 
 	launch_cmd 1 service rabbitmq-server stop
-
-	check_code $CODE "Error in rabbitMQ configurations ..."
 	
 	rm -f $PREFIX/var/log/rabbitmq/*
 }
 
 function pre_remove(){
 	echo "Pre-remove $NAME $VERSION-$RELEASE ..."
-	service rabbitmq-server stop 
+	launch_cmd 0 service rabbitmq-server stop 
 }
 
 function post_remove(){

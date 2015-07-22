@@ -35,7 +35,7 @@ detect_os
 echo
 
 echo " + Make directories and init environement ..."
-mkdir -p etc lib var/log &>> $LOG
+mkdir -p bin etc lib var/log &>> $LOG
 check_code $? "Impossible to make directories (check log: $LOG)"
 
 cp $BPATH/common.sh lib/ &>> $LOG
@@ -57,7 +57,7 @@ echo "   - Ok"
 
 echo " + Check Ubik install (package manager) ..."
 ubik -v &> /dev/null
-check_code $? "Impossible to find Ubik, please install Ubik with root user: 'pip install --upgrade git+http://github.com/socketubs/ubik.git@0.1'"
+check_code $? "Impossible to find Ubik, please install Ubik with root user: 'pip install --upgrade git+https://github.com/socketubs/ubik.git@0.1'"
 echo "   - Ok"
 
 echo " + Install Canohome from canopsis package ..."

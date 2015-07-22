@@ -1,0 +1,15 @@
+{
+	"type": "object",
+	"categories": [{
+		"title": "General",
+		"keys":["refreshInterval"]
+	}],
+
+	"properties": {
+		"refreshInterval": {
+			"type": "integer",
+			"description": "Refresh interval, in seconds",
+			"default": 180
+		}
+	}
+}

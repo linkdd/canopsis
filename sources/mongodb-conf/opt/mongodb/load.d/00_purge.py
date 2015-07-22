@@ -1,6 +1,7 @@
 #!/usr/bin/env python
-#--------------------------------
-# Copyright (c) 2011 "Capensis" [http://www.capensis.com]
+# -*- coding: utf-8 -*-
+# --------------------------------
+# Copyright (c) 2015 "Capensis" [http://www.capensis.com]
 #
 # This file is part of Canopsis.
 #
@@ -18,27 +19,28 @@
 # along with Canopsis.  If not, see <http://www.gnu.org/licenses/>.
 # ---------------------------------
 
-from caccount import caccount
-from cstorage import cstorage
-from crecord import crecord
+from canopsis.old.account import Account
+from canopsis.old.storage import Storage
 
-##set root account
-root = caccount(user="root", group="root")
-storage = cstorage(account=root)
+root = Account(user="root", group="root")
+storage = Storage(account=root)
 
 logger = None
 
+
 def init():
-	namespaces = ['cache', 'events', 'events_log', 'object' ]
-	
-	for namespace in namespaces:
-		logger.info(" + Drop '%s' collection" % namespace)
-		storage.drop_namespace(namespace)
-	
-	#logger.info(" + Create 'cache' collection")
-	## Create 100MB cache
-	#storage.db.create_collection('cache', options={'capped': True, 'size': 104857600})
+    collections = [
+        'cache',
+        'events',
+        'events_log',
+        'object',
+        'userpreferences'
+    ]
+
+    for collection in collections:
+        logger.info(" + Drop '%s' collection" % collection)
+        storage.drop_namespace(collection)
+
 
 def update():
-	storage.drop_namespace('cache')
-
+    storage.drop_namespace('cache')

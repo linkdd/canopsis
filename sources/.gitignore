@@ -5,15 +5,26 @@ packages/*/files.tgz
 */draft
 */drafts
 externals/*/
-*.pyc
 *neb2socket.o
 !externals/rabbitmq-plugins
 packages/files.lst
 bootstrap/*.tgz
 webcore/var/www/canopsis/resources/lib
+webcore/var/www/canopsis/commit.js
+build
+dist
+
+#####################
+# Python files
+#####################
+*.egg
+*.egg-info
+*.pyc
 pyperfstore/*.egg*
 pyperfstore2/*.egg*
-webcore/var/www/canopsis/canopsis.js
-webcore/var/www/canopsis/canopsis.min.js
-webcore/var/www/canopsis/canopsis.min.js.gz
-webcore/var/www/canopsis/commit.js
+
+#####################
+# Temp files
+#####################
+*~
+build_messages.txt

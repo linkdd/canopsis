@@ -1,6 +1,7 @@
 #!/usr/bin/env python
-#--------------------------------
-# Copyright (c) 2011 "Capensis" [http://www.capensis.com]
+# -*- coding: utf-8 -*-
+# --------------------------------
+# Copyright (c) 2015 "Capensis" [http://www.capensis.com]
 #
 # This file is part of Canopsis.
 #
@@ -18,33 +19,35 @@
 # along with Canopsis.  If not, see <http://www.gnu.org/licenses/>.
 # ---------------------------------
 
+from canopsis.common.utils import dynmodloads
+from canopsis.common.init import Init
+
 import sys
-from ctools import dynmodloads
-from cinit import cinit
-init = cinit()
+import os
 
-if len(sys.argv) != 2:
-	print "Usage: %s [init|update]" % sys.argv[0]
-	sys.exit(1)
 
-action = sys.argv[1].lower()
+if __name__ == '__main__':
+    init = Init()
+    logger = init.getLogger('filldb')
 
-if action != "update" and action != "init":
-	print "Invalid option"
-	sys.exit(1)
+    if len(sys.argv) != 2:
+        print('Usage: {0} [init|update]'.format(sys.argv[0]))
+        sys.exit(1)
 
-## Logger
-logger 	= init.getLogger("mongodb-conf", "INFO")
+    action = sys.argv[1].lower()
 
-## Load
-modules = dynmodloads("~/opt/mongodb/load.d")
+    if action not in ['update', 'init']:
+        print('Invalid option: {0}'.format(action))
+        sys.exit(1)
 
-for name in sorted(modules):
-	module = modules[name]
-	module.logger = logger
-	logger.info("%s %s ..." % (action, name))
-	
-	if action == "update":
-		module.update()
-	elif action == "init":
-		module.init()
+    modules = dynmodloads(
+        os.path.join(sys.prefix, 'opt', 'mongodb', 'load.d'),
+        logger=logger
+    )
+
+    for name in sorted(modules):
+        module = modules[name]
+        module.logger = logger
+        logger.info("{0} {1} ...".format(action, name))
+
+        getattr(module, action)()

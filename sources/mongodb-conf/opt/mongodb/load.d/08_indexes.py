@@ -1,6 +1,7 @@
 #!/usr/bin/env python
-#--------------------------------
-# Copyright (c) 2011 "Capensis" [http://www.capensis.com]
+# -*- coding: utf-8 -*-
+# --------------------------------
+# Copyright (c) 2015 "Capensis" [http://www.capensis.com]
 #
 # This file is part of Canopsis.
 #
@@ -18,74 +19,127 @@
 # along with Canopsis.  If not, see <http://www.gnu.org/licenses/>.
 # ---------------------------------
 
-from caccount import caccount
-from cstorage import get_storage
+from canopsis.old.account import Account
+from canopsis.old.storage import get_storage
 
-logger = None
+import signal
 
-##set root account
-root = caccount(user="root", group="root")
+# Set root account
+root = Account(user="root", group="root")
 storage = get_storage(account=root, namespace='object')
 
+"""
+    This file is copied to canopsis libs folder,
+    so there should no have direct canopsis import here
+"""
+
+INDEXES = {
+    'object': [
+        [('crecord_type', 1)],
+        [('crecord_type', 1), ('crecord_name', 1)],
+    ],
+    'events': [
+        [
+            ('connector_name', 1),
+            ('event_type', 1),
+            ('component', 1),
+            ('resource', 1),
+            ('state_type', 1),
+            ('state', 1)
+        ], [
+            ('source_type', 1),
+            ('state', 1)
+        ], [
+            ('event_type', 1),
+            ('component', 1),
+            ('resource', 1)
+        ], [
+            ('event_type', 1),
+            ('resource', 1)
+        ],
+        [('event_type', 1)],
+        [('source_type', 1)],
+        [('domain', 1)],
+        [('perimeter', 1)],
+        [('connector', 1)],
+        [('component', 1)],
+        [('resource', 1)],
+        [('status', 1)],
+        [('state', 1)],
+        [('ack', 1)],
+
+    ],
+    'events_log': [
+        [
+            ('connector_name', 1),
+            ('event_type', 1),
+            ('component', 1),
+            ('resource', 1),
+            ('state_type', 1),
+            ('state', 1)
+        ], [('source_type', 1), ('tags', 1)],
+        [('event_type', 1), ('component', 1), ('resource', 1)],
+        [('rk', 1), ('timestamp', 1)],
+        [('event_type', 1), ('resource', 1)],
+        [('event_type', 1)],
+        [('tags', 1)],
+        [('referer', 1)],
+        [('event_type', 1)],
+        [('domain', 1)],
+        [('perimeter', 1)],
+        [('connector', 1)],
+        [('component', 1)],
+        [('resource', 1)],
+        [('status', 1)],
+        [('state', 1)],
+        [('ack', 1)],
+    ],
+    'downtime': [
+        [('start', 1), ('end', 1)]
+    ],
+    'ack': [
+        [('rk', 1), ('solved', 1)]
+    ]
+}
+
+
 def init():
-	logger.info(" + Create index of 'perfdata2'")
-	storage.get_backend('perfdata2').ensure_index([
-		('co',	1)
-	])
-	storage.get_backend('perfdata2').ensure_index([
-		('re',	1)
-	])
-	storage.get_backend('perfdata2').ensure_index([
-		('me',	1)
-	])
-	storage.get_backend('perfdata2').ensure_index([
-		('tg',	1)
-	])
-	storage.get_backend('perfdata2').ensure_index([
-		('co',	1),
-		('re',	1),
-		('me',	1)
-	])
+    print('Starting indexes update...')
 
-	logger.info(" + Create index of 'events'")
-	storage.get_backend('events').ensure_index([
-		('connector_name',	1),
-		('resource',		1),
-		('component',		1),
-		('state',			1),
-		('state_type',		1),
-		('event_type',		1),
-	])
-	storage.get_backend('events').ensure_index([
-		('tags', 			1),
-		('source_type',		1),
-	])
-	storage.get_backend('events').ensure_index([
-		('component',		1),
+    for collection in INDEXES:
+        print(' + Create indexes for collection {0}'.format(collection))
+        col = storage.get_backend(collection)
+        col.drop_indexes()
 
-	])
-	
-	logger.info(" + Create index of 'events_log'")
-	storage.get_backend('events_log').ensure_index([
-		('connector_name',	1),
-		('resource',		1),
-		('component',		1),
-		('state',			1),
-		('event_type',		1),
-		
-	])
-	storage.get_backend('events_log').ensure_index([
-		('state_type',		1),
-	])
-	storage.get_backend('events_log').ensure_index([
-		('tags',			1)
-	])
-	storage.get_backend('events_log').ensure_index([
-		('referer',			1)
-	])
-	storage.get_backend('events_log').ensure_index([
-		('timestamp',		1)
-	])
+        for index in INDEXES[collection]:
+            col.ensure_index(index)
+
 
 def update():
-	init()
+    answered = False
+    user_input = 'N'
+
+    def timeout(sig, frame):
+        raise Exception('')
+
+    signal.signal(signal.SIGALRM, timeout)
+
+    while not answered:
+        signal.alarm(30)
+
+        try:
+            user_input = raw_input(
+                'Add/Update indexes (update may take time)? Y/N (default=N): '
+            )
+
+            if user_input in ['Y', 'y', 'N', 'n', '']:
+                answered = True
+
+        except Exception as err:
+            user_input = 'N'
+            answered = True
+
+        signal.alarm(0)
+
+    if user_input == 'Y' or user_input == 'y':
+        init()

@@ -1,0 +1,28 @@
+{
+	"type": "object",
+	"categories": [{
+		"title": "General",
+		"keys":["_id", "description"]
+	},{
+		"title": "rights",
+		"keys": ["rights"]
+	}],
+	"properties": {
+		"crecord_type": {
+			"enum": ["role"],
+			"required": true,
+			"title": "type"
+		},
+		"_id": {
+			"type": "string"
+		},
+		"description": {
+			"type": "string"
+		},
+		"rights": {
+			"type": "object",
+			"role": "rights",
+			"valuekey" : "_id"
+		}
+	}
+}

@@ -1,63 +1,143 @@
 #!/bin/bash
 
 NAME="mongodb-conf"
-VERSION=0.6
+VERSION=0.7
 RELEASE=0
 DESCRIPTION=""
-REQUIRES="canohome python canolibs canotools mongodb"
+REQUIRES="canohome python canolibs mongodb"
 
 NO_ARCH=true
 NO_DIST=true
 NO_DISTVERS=true
 
 function pre_install(){
-	echo "Pre-install $NAME $VERSION-$RELEASE ..."
-	check_code $? 
+    echo "Pre-install $NAME $VERSION-$RELEASE ..."
+	check_code $?
+}
+
+
+function wait_for_mongo() {
+
+	echo -n "Safe wait (may be long the first time) "
+
+	mongo_user=$($PREFIX/bin/initool get $PREFIX/etc/storage/storage.conf DATABASE user)
+	mongo_pass=$($PREFIX/bin/initool get $PREFIX/etc/storage/storage.conf DATABASE pwd)
+
+	mongo_ready=false
+	while ! $mongo_ready
+	do
+		echo "show collections" | $PREFIX/bin/mongo canopsis -u $mongo_user -p $mongo_pass >/dev/null 2>&1
+
+		if [ $? -eq 0 ]
+		then
+			echo " ready"
+			mongo_ready=true
+		else
+			echo -n "."
+			sleep 1
+		fi
+	done
+}
+
+
+function wait_for_mongo_install() {
+
+	echo -n "Safe wait (may be long the first time) "
+
+	mongo_ready=false
+	while ! $mongo_ready
+	do
+		echo "show collections" | $PREFIX/bin/mongo canopsis >/dev/null 2>&1
+
+		if [ $? -eq 0 ]
+		then
+			echo " ready"
+			mongo_ready=true
+		else
+			echo -n "."
+			sleep 1
+		fi
+	done
 }
 
 function post_install(){
 	echo "Post-install $NAME $VERSION-$RELEASE ..."
 
 	launch_cmd 0 service mongodb stop
-		
+
 	rm /tmp/mongodb-*.sock &> /dev/null || true
-	
-	#launch_cmd 1 service mongodb start
-	launch_cmd 1 mongod -f $PREFIX/etc/mongodb.conf --nojournal --noprealloc --fork
 
-        echo -n "Safe wait ..."
-        STATE=1
-        TRY=0
-        while [ $STATE -ne 0 ]; do
-            if [ $TRY -eq 10 ]; then
-                break
-            fi
-            sleep 1
-            echo "show dbs" | mongo &> /dev/null
-            STATE=$?
-            TRY=$((TRY + 1))
-            echo -n "."
-        done
-        echo
-        check_code $STATE "Failed to join MongoDB"
+	launch_cmd 1 service mongodb start
+	wait_for_mongo_install
 
-	#check if db already exist
-	if [ -f  $PREFIX/var/lib/mongodb/canopsis.ns ]
+	# Define user
+	if [ "x$MONGODB_ADMIN_PASSWD" == "x" ]
 	then
-		launch_cmd 1 python $PREFIX/opt/mongodb/filldb.py update
+		while true
+		do
+			safe_prompt "MongoDB password for admin: " adminpass
+			safe_prompt "Confirm password: " confirm
+
+			if [ "$adminpass" == "$confirm" ]
+			then
+				break
+			else
+				echo "Passwords doesn't match"
+			fi
+		done
 	else
-		launch_cmd 1 python $PREFIX/opt/mongodb/filldb.py init
+		adminpass=$MONGODB_ADMIN_PASSWD
 	fi
-	
-	#launch_cmd 1 service mongodb stop
-	launch_cmd 1 mongod -f etc/mongodb.conf --shutdown 
-	
-	check_code $? "Impossible to init mongoDB ..."
+
+	if [ "x$MONGODB_USER" == "x" ]
+	then
+		safe_prompt "MongoDB common user: " cpsuser "show"
+	else
+		cpsuser=$MONGODB_USER
+	fi
+
+	if [ "x$MONGODB_USER_PASSWD" == "x" ]
+	then
+		while true
+		do
+			safe_prompt "MongoDB password for $cpsuser: " cpspass
+			safe_prompt "Confirm password: " confirm
+
+			if [ "$cpspass" == "$confirm" ]
+			then
+				break
+			else
+				echo "Passwords doesn't match"
+			fi
+		done
+	else
+		cpspass=$MONGODB_USER_PASSWD
+	fi
+
+	echo "  + Create admin user ..."
+	launch_cmd 1 $PREFIX/bin/mongo admin --eval "\"db.createUser({user: 'admin', pwd: '$adminpass', roles: ['readWriteAnyDatabase', 'userAdminAnyDatabase', 'dbAdminAnyDatabase', 'root']})\""
+
+	echo "  + Create $cpsuser user ..."
+	launch_cmd 1 $PREFIX/bin/mongo -u admin -p $adminpass --authenticationDatabase admin canopsis --eval "\"db.createUser({user: '$cpsuser', pwd: '$cpspass', roles: ['dbOwner']})\""
+
+	launch_cmd 0 $PREFIX/bin/initool set $PREFIX/etc/cstorage.conf master userid $cpsuser
+	launch_cmd 0 $PREFIX/bin/initool set $PREFIX/etc/cstorage.conf master password $cpspass
+
+	launch_cmd 0 $PREFIX/bin/initool set $PREFIX/etc/storage/storage.conf DATABASE user $cpsuser
+	launch_cmd 0 $PREFIX/bin/initool set $PREFIX/etc/storage/storage.conf DATABASE pwd $cpspass
+
+	echo "  + Initialize database"
+	launch_cmd 1 schema2db
+	launch_cmd 1 python $PREFIX/opt/mongodb/filldb.py init
+
+    $PREFIX/bin/webmodulemanager init
+
+	launch_cmd 1 service mongodb stop
 }
-	
+
 function pre_remove(){
 	echo "Pre-remove $NAME $VERSION-$RELEASE ..."
-	service mongodb stop
+	launch_cmd 0 service mongodb stop
 }
 
 function post_remove(){
@@ -70,11 +150,22 @@ function pre_update(){
 
 function post_update(){
 	echo "Post-update $NAME $VERSION-$RELEASE ..."
-	service mongodb start
-	sleep 2
+
+	launch_cmd 1 service mongodb start
+	wait_for_mongo
+
+	echo "   + Update JSON schemas"
+
+	launch_cmd 1 schema2db
+
+	echo "   + Fix permissions"
+	chown -R $HUSER:$HGROUP $PREFIX/etc/schema.d
+	check_code $?
 
 	launch_cmd 1 python $PREFIX/opt/mongodb/filldb.py update
 	check_code $?
+
+    $PREFIX/bin/webmodulemanager init
 }
 
 function purge(){
